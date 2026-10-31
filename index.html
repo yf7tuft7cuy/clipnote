@@ -73,6 +73,7 @@ button{cursor:pointer}
 .b-img{background:var(--b-img)}.b-vid{background:var(--b-vid)}.b-sns{background:var(--b-sns)}.b-web{background:var(--b-web)}
 :root[data-theme="dark"] .badge{color:#111613}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .badge{color:#111613}}
+.bulk{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--muted);padding:2px 2px 4px;font-variant-numeric:tabular-nums}
 .url{font-family:var(--font-mono);font-size:12.5px;overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}
 .acts{display:flex;flex-wrap:wrap;gap:6px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;font-size:14px;text-decoration:none;color:var(--fg);font-weight:600}
@@ -231,7 +232,7 @@ function card(n){const f=fById(n.folderId);const u=urlsOf(n.body).length;
 function linkRow(u,from){const[k,c]=kind(u);
   return `<div class="link"><div class="link-head"><span class="badge b-${c}">${k}</span>${from?`<span class="from">${esc(from)}</span>`:''}</div>
   <div class="url">${esc(u)}</div>
-  <div class="acts"><a class="btn sm" href="${esc(u)}" target="_blank" rel="noopener noreferrer">開く</a><button class="btn sm" data-act="copy" data-url="${esc(u)}">コピー</button>${c==='img'||c==='vid'?`<button class="btn sm primary" data-act="dl" data-url="${esc(u)}">保存</button>`:''}</div></div>`}
+  <div class="acts"><a class="btn sm" href="${esc(u)}" target="_blank" rel="noopener noreferrer">開く</a><button class="btn sm" data-act="copy" data-url="${esc(u)}">コピー</button>${c!=='web'?`<button class="btn sm primary" data-act="share" data-url="${esc(u)}">Termuxで保存</button>`:''}${c==='img'||c==='vid'?`<button class="btn sm" data-act="dl" data-url="${esc(u)}">直接保存</button>`:''}</div></div>`}
 function render(){
   renderChips();
   const vn=visibleNotes();const links=[];const seen=new Set();
@@ -244,7 +245,8 @@ function render(){
   if(st.tab==='notes'){
     list.innerHTML=vn.length?vn.map(card).join(''):`<div class="empty"><p>${st.q?'見つかりませんでした。別の言葉で探してみてください。':'メモはまだありません。右下の「＋ メモ」から作れます。'}</p></div>`;
   }else{
-    list.innerHTML=links.length?links.map(([u,t])=>linkRow(u,t)).join(''):`<div class="empty"><p>メモに貼ったURLがここに一覧で出ます。</p></div>`;
+    const media=links.filter(([u])=>kind(u)[1]!=='web').map(([u])=>u);
+    list.innerHTML=links.length?(media.length?`<div class="bulk"><span>保存できるリンク ${media.length}件</span><button class="btn sm primary" data-act="share-all">まとめてTermuxで保存</button></div>`:'')+links.map(([u,t])=>linkRow(u,t)).join(''):`<div class="empty"><p>メモに貼ったURLがここに一覧で出ます。</p></div>`;
   }
   hydrate(list)}
 
@@ -304,6 +306,9 @@ async function addFiles(files){for(const f of files){if(!f.type.startsWith('imag
 /* ---------- links ---------- */
 function copy(t){const fb=()=>{sheet(`<h2>URLをコピー</h2><p class="hint">下の文字を長押ししてコピーしてください。</p><textarea readonly id="copy-ta" class="field" rows="3">${esc(t)}</textarea><div class="row"><button class="btn" data-act="close">閉じる</button></div>`);const ta=$('#copy-ta');ta.focus();ta.select()};
   try{navigator.clipboard.writeText(t).then(()=>toast('コピーしました'),fb)}catch(e){fb()}}
+function shareOut(text){
+  if(navigator.share){navigator.share({text}).then(()=>{},e=>{if(e&&e.name!=='AbortError')copy(text)})}
+  else{copy(text);toast('共有が使えないのでコピーしました。Termuxで dl のあとに貼り付けてください',4500)}}
 function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000)}
 async function dl(url){toast('読み込み中…',8000);
   try{const r=await fetch(url,{mode:'cors'});if(!r.ok)throw 0;const b=await r.blob();
@@ -348,6 +353,8 @@ document.addEventListener('click',async ev=>{
     case'img-rm':st.editing.images=st.editing.images.filter(x=>x!==id);st.removedImgs.push(id);closeSheet();renderEdImgs();break;
     case'copy':copy(t.dataset.url);break;
     case'dl':dl(t.dataset.url);break;
+    case'share':shareOut(t.dataset.url);break;
+    case'share-all':{const ls=[...new Set(visibleNotes().flatMap(n=>urlsOf(n.body)))].filter(u=>kind(u)[1]!=='web');if(ls.length)shareOut(ls.join('\n'));break}
     case'unlock':unlockSheet(id,t.dataset.then);break;
     case'relock':st.unlocked.delete(st.folder);render();toast('鍵を閉めました');break;
     case'f-rename':{const v=$('#fn-'+id).value.trim();if(!v){toast('名前を入力してください');break}const f=fById(id);f.name=v;await S.put('folders',f);render();toast('名前を保存しました');break}
