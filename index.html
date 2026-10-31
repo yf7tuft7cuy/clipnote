@@ -270,13 +270,20 @@ function lockSetSheet(id){const f=fById(id);sheet(`<h2>「${esc(f.name)}」に�
   <p class="hint">パスコードを忘れると中のメモは開けません。メモそのものは暗号化されないので、スマホ自体のロックも使ってください。</p>
   <div class="row"><button type="button" class="btn" data-act="folders">戻る</button><button class="btn primary">鍵をかける</button></div></form>`)}
 
+function chpassSheet(id){const f=fById(id);sheet(`<h2>「${esc(f.name)}」のパスコードを変更</h2>
+  <form data-form="chpass" data-id="${id}"><input id="cp0" class="field" type="password" inputmode="numeric" autocomplete="off" placeholder="今のパスコード">
+  <input id="cp1" class="field" type="password" inputmode="numeric" autocomplete="off" placeholder="新しいパスコード（4文字以上）">
+  <input id="cp2" class="field" type="password" inputmode="numeric" autocomplete="off" placeholder="新しいパスコードをもう一度">
+  <p class="err" id="cp-err" hidden></p>
+  <div class="row"><button type="button" class="btn" data-act="folders">戻る</button><button class="btn primary">変更する</button></div></form>`)}
+
 /* ---------- folders sheet ---------- */
 function foldersSheet(){
   const rows=st.folders.map(f=>{const locked=isLocked(f.id);const cnt=st.notes.filter(n=>n.folderId===f.id).length;
     return `<div class="frow"><div style="display:flex;gap:8px"><input id="fn-${f.id}" class="field" value="${esc(f.name)}" ${locked?'disabled':''} aria-label="フォルダ名"></div>
     <div class="meta"><span>メモ ${locked?'—':cnt}</span><span>作成 ${fmt(f.created)}</span><span>${f.lock?(locked?'鍵がかかっています':'鍵を開けています'):'鍵なし'}</span></div>
     <div class="acts">${locked?`<button class="btn sm primary" data-act="unlock" data-id="${f.id}" data-then="folders">鍵を開けて編集</button>`
-      :`<button class="btn sm" data-act="f-rename" data-id="${f.id}">名前を保存</button>${f.lock?`<button class="btn sm" data-act="f-unlockremove" data-id="${f.id}">鍵を外す</button>`:`<button class="btn sm" data-act="f-lock" data-id="${f.id}">鍵をかける</button>`}<button class="btn sm danger" data-act="f-del" data-id="${f.id}">削除</button>`}</div></div>`}).join('');
+      :`<button class="btn sm" data-act="f-rename" data-id="${f.id}">名前を保存</button>${f.lock?`<button class="btn sm" data-act="f-chpass" data-id="${f.id}">パスコードを変更</button><button class="btn sm" data-act="f-unlockremove" data-id="${f.id}">鍵を外す</button>`:`<button class="btn sm" data-act="f-lock" data-id="${f.id}">鍵をかける</button>`}<button class="btn sm danger" data-act="f-del" data-id="${f.id}">削除</button>`}</div></div>`}).join('');
   sheet(`<h2>フォルダ管理</h2><form data-form="f-add" style="display:flex;gap:8px"><input id="f-new" class="field" placeholder="新しいフォルダ名" autocomplete="off"><button class="btn primary" style="flex:none">追加</button></form>${rows||'<p class="hint">まだフォルダはありません。</p>'}<div class="row"><button class="btn" data-act="close">閉じる</button></div>`)}
 
 /* ---------- editor ---------- */
@@ -361,6 +368,7 @@ document.addEventListener('click',async ev=>{
     case'relock':st.unlocked.delete(st.folder);render();toast('鍵を閉めました');break;
     case'f-rename':{const v=$('#fn-'+id).value.trim();if(!v){toast('名前を入力してください');break}const f=fById(id);f.name=v;await S.put('folders',f);render();toast('名前を保存しました');break}
     case'f-lock':lockSetSheet(id);break;
+    case'f-chpass':chpassSheet(id);break;
     case'f-unlockremove':{const f=fById(id);delete f.lock;delete f.salt;await S.put('folders',f);st.unlocked.delete(id);render();foldersSheet();toast('鍵を外しました');break}
     case'f-del':{const f=fById(id);const c=st.notes.filter(n=>n.folderId===id).length;confirmSheet(`「${f.name}」を削除しますか？`,c?`中のメモ${c}件は消えずに「未分類」に移ります。`:'このフォルダは空です。','削除する','f-del-ok',id);break}
     case'f-del-ok':{for(const n of st.notes.filter(n=>n.folderId===id)){n.folderId=null;await S.put('notes',n)}await S.del('folders',id);st.folders=st.folders.filter(f=>f.id!==id);if(st.folder===id)st.folder='all';render();foldersSheet();break}
@@ -380,6 +388,12 @@ document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target
     if(a.length<4){err.textContent='4文字以上で入力してください。';err.hidden=false;return}
     if(a!==b){err.textContent='2回の入力が一致しません。';err.hidden=false;return}
     const fo=fById(f.dataset.id);fo.salt=uid();fo.lock=await hash(a,fo.salt);await S.put('folders',fo);st.unlocked.add(fo.id);render();foldersSheet();toast('鍵をかけました')}
+  if(kind==='chpass'){const fo=fById(f.dataset.id),err=$('#cp-err');const show=m=>{err.textContent=m;err.hidden=false};
+    if(await hash($('#cp0').value,fo.salt)!==fo.lock){show('今のパスコードが違います。');$('#cp0').value='';$('#cp0').focus();return}
+    const a=$('#cp1').value,b=$('#cp2').value;
+    if(a.length<4){show('新しいパスコードは4文字以上で入力してください。');return}
+    if(a!==b){show('新しいパスコードが2回で一致しません。');return}
+    fo.salt=uid();fo.lock=await hash(a,fo.salt);await S.put('folders',fo);render();foldersSheet();toast('パスコードを変更しました')}
   if(kind==='f-add'){const v=$('#f-new').value.trim();if(!v)return;const fo={id:uid(),name:v,created:Date.now()};await S.put('folders',fo);st.folders.push(fo);render();foldersSheet();toast('フォルダを追加しました')}});
 $('#q').addEventListener('input',e=>{st.q=e.target.value;render()});
 let lt;$('#ed-body').addEventListener('input',()=>{clearTimeout(lt);lt=setTimeout(renderEdLinks,250)});
