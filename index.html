@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>クリップ帳</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="クリップ帳">
+<meta name="theme-color" content="#0E6B5A">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
+</head><body>
+<style>
+/* Layout: phone-first single column notebook. Sticky search header, folder chip rail, card list, floating add button, full-screen editor. */
+:root{
+  --bg:#EDF1EE; --surface:#FFFFFF; --sunk:#E1E8E3; --fg:#17201B; --muted:#56645D; --line:#D0D9D3;
+  --accent:#0E6B5A; --accent-ink:#FFFFFF; --accent-soft:#D4E9E3; --mark:#F2CF5B; --danger:#B3261E;
+  --b-img:#2F6FB5; --b-vid:#8A4FB0; --b-sns:#C2410C; --b-web:#56645D;
+  --font-ui:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI","Meiryo",system-ui,sans-serif;
+  --font-mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111613; --surface:#1A211D; --sunk:#232C27; --fg:#E4EBE7; --muted:#9AA9A1; --line:#2E3933;
+  --accent:#3DB79C; --accent-ink:#0B1411; --accent-soft:#1F3A32; --mark:#E2C04E; --danger:#F2867E;
+  --b-img:#7FB0EA; --b-vid:#C49BE0; --b-sns:#F49A6A; --b-web:#9AA9A1; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --surface:#1A211D; --sunk:#232C27; --fg:#E4EBE7; --muted:#9AA9A1; --line:#2E3933;
+  --accent:#3DB79C; --accent-ink:#0B1411; --accent-soft:#1F3A32; --mark:#E2C04E; --danger:#F2867E;
+  --b-img:#7FB0EA; --b-vid:#C49BE0; --b-sns:#F49A6A; --b-web:#9AA9A1; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.6;-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:720px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 110px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;display:grid;gap:10px}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand h1{margin:0;font-size:20px;font-weight:800;letter-spacing:.04em;display:flex;align-items:center;gap:8px}
+.clip{width:14px;height:24px;border:2.5px solid var(--accent);border-radius:8px 8px 7px 7px;position:relative;transform:rotate(-12deg)}
+.clip::after{content:"";position:absolute;left:2px;right:2px;top:5px;bottom:-1px;border:2px solid var(--accent);border-bottom:none;border-radius:5px 5px 0 0}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:0 10px}
+.search input{flex:1;min-width:0;border:0;background:transparent;padding:10px 0;outline:none}
+.search svg{flex:none;color:var(--muted)}
+.x{border:0;background:var(--sunk);border-radius:99px;width:24px;height:24px;line-height:1;color:var(--muted)}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:0 max(16px,env(safe-area-inset-left,0px))}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 13px;font-size:14px;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.chip.ghost{background:transparent;border-style:dashed;color:var(--muted)}
+.tabs{display:flex;gap:4px;background:var(--sunk);border-radius:10px;padding:3px}
+.tabs button{flex:1;border:0;background:transparent;border-radius:8px;padding:6px;font-size:14px;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--fg);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.tabs .n{font-variant-numeric:tabular-nums;margin-left:4px;font-size:12px}
+.folderbar{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted)}
+#list{display:grid;gap:10px;padding-top:4px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:6px;cursor:pointer;min-width:0}
+.card-top{display:flex;gap:10px;align-items:flex-start;justify-content:space-between}
+.card h3{margin:0;font-size:16px;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.thumb{width:48px;height:48px;border-radius:8px;object-fit:cover;flex:none;background:var(--sunk)}
+.snip{margin:0;color:var(--muted);font-size:14px;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{border:0;background:var(--accent-soft);color:var(--accent);border-radius:6px;padding:1px 8px;font-size:12px;font-weight:600}
+.link{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:grid;gap:6px;min-width:0}
+.link-head{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);min-width:0}
+.from{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{flex:none;font-size:11px;font-weight:700;border-radius:5px;padding:1px 7px;color:#fff;letter-spacing:.03em}
+.b-img{background:var(--b-img)}.b-vid{background:var(--b-vid)}.b-sns{background:var(--b-sns)}.b-web{background:var(--b-web)}
+:root[data-theme="dark"] .badge{color:#111613}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .badge{color:#111613}}
+.url{font-family:var(--font-mono);font-size:12.5px;overflow-wrap:anywhere;user-select:all;-webkit-user-select:all}
+.acts{display:flex;flex-wrap:wrap;gap:6px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;font-size:14px;text-decoration:none;color:var(--fg);font-weight:600}
+.btn.sm{padding:4px 12px;font-size:13px;border-radius:8px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--danger);border-color:var(--danger);background:transparent}
+.btn.plain{border-color:transparent;background:transparent}
+.empty{text-align:center;color:var(--muted);padding:40px 12px;display:grid;gap:12px;justify-items:center}
+.empty p{margin:0}
+.fab{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:6;border:0;background:var(--accent);color:var(--accent-ink);border-radius:18px;padding:14px 20px;font-size:15px;font-weight:800;box-shadow:0 6px 18px rgba(14,107,90,.35);display:flex;align-items:center;gap:6px}
+/* editor */
+#editor{position:fixed;inset:0;z-index:20;background:var(--bg);overflow-y:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(40px + env(safe-area-inset-bottom,0px))}
+.ed-bar{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.ed-date{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:center}
+.ed-wrap{max-width:720px;margin:0 auto;display:grid;gap:12px;padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.field{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font-size:16px}
+#ed-title{font-size:19px;font-weight:700}
+#ed-body{min-height:42vh;resize:vertical;line-height:1.7}
+.ed-row{display:flex;gap:10px;flex-wrap:wrap}
+.ed-row>*{flex:1 1 160px;min-width:0}
+.lbl{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.imgs button{border:0;padding:0;background:var(--sunk);border-radius:10px;overflow:hidden;aspect-ratio:1;max-width:100%}
+.imgs img{width:100%;height:100%;object-fit:cover;display:block}
+.vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
+.sec-h{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin:4px 0 0}
+#ed-links{display:grid;gap:8px}
+/* sheet */
+#sheet{position:fixed;inset:0;z-index:30;background:rgba(10,16,13,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet-in{background:var(--surface);width:100%;max-width:560px;max-height:88vh;overflow-y:auto;border-radius:18px 18px 0 0;display:grid;gap:12px;padding-block:18px calc(20px + env(safe-area-inset-bottom,0px));padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px))}
+.sheet-in h2{margin:0;font-size:17px}
+.sheet-in form{display:grid;gap:10px}
+.row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.hint{margin:0;font-size:13px;color:var(--muted)}
+.err{margin:0;font-size:13px;color:var(--danger)}
+.frow{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.frow .acts{justify-content:flex-start}
+.big{width:100%;max-height:60vh;object-fit:contain;border-radius:10px;background:var(--sunk)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;max-width:calc(100% - 32px);text-align:center}
+@media (prefers-reduced-motion:no-preference){.sheet-in{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1><span class="clip" aria-hidden="true"></span>クリップ帳</h1>
+      <button class="btn sm plain" data-act="settings">バックアップ</button>
+    </div>
+    <label class="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="メモを検索（#タグ でも探せます）" autocomplete="off">
+      <button class="x" data-act="clearq" aria-label="検索を消す" hidden id="qx">×</button>
+    </label>
+    <div class="chips" id="chips"></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-act="tab" data-tab="notes">メモ<span class="n" id="cnt-notes">0</span></button>
+      <button role="tab" data-act="tab" data-tab="links">リンク一覧<span class="n" id="cnt-links">0</span></button>
+    </div>
+    <div class="folderbar" id="folderbar" hidden></div>
+  </header>
+  <main id="list" aria-live="polite"></main>
+</div>
+<button class="fab" data-act="new" aria-label="新しいメモ"><span aria-hidden="true">＋</span>メモ</button>
+
+<div id="editor" hidden role="dialog" aria-label="メモを編集">
+  <div class="ed-bar">
+    <button class="btn primary" data-act="ed-done">完了</button>
+    <span class="ed-date" id="ed-date"></span>
+    <button class="btn danger" data-act="ed-del">削除</button>
+  </div>
+  <div class="ed-wrap">
+    <input id="ed-title" class="field" placeholder="タイトル" autocomplete="off">
+    <div class="ed-row">
+      <label class="lbl">フォルダ<select id="ed-folder" class="field"></select></label>
+      <label class="lbl">タグ（スペース区切り）<input id="ed-tags" class="field" placeholder="例：動画 あとで" autocomplete="off"></label>
+    </div>
+    <textarea id="ed-body" class="field" placeholder="メモを書くか、URLを貼り付け"></textarea>
+    <p class="sec-h">画像</p>
+    <div class="imgs" id="ed-imgs"></div>
+    <div><label class="btn" for="ed-file">写真を追加</label><input id="ed-file" class="vh" type="file" accept="image/*" multiple></div>
+    <p class="sec-h" id="ed-links-h" hidden>このメモのリンク</p>
+    <div id="ed-links"></div>
+  </div>
+</div>
+
+<div id="sheet" hidden><div class="sheet-in" id="sheet-body" role="dialog"></div></div>
+<div id="toast" hidden role="status"></div>
+
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const p2=n=>String(n).padStart(2,'0');
+const fmt=t=>{const d=new Date(t);return `${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`};
+const URL_RE=/https?:\/\/[^\s<>"'「」（）()、。]+/g;
+const urlsOf=t=>[...new Set((t||'').match(URL_RE)||[])];
+function kind(u){let h='',p='';try{const x=new URL(u);h=x.hostname.toLowerCase();p=x.pathname.toLowerCase()}catch(e){}
+  if(/\.(jpe?g|png|gif|webp|heic|avif)$/.test(p))return['画像','img'];
+  if(/\.(mp4|webm|mov|m4v)$/.test(p))return['動画','vid'];
+  if(/(^|\.)(x\.com|twitter\.com)$/.test(h))return['X','sns'];
+  if(/(^|\.)(youtube\.com|youtu\.be)$/.test(h))return['YouTube','sns'];
+  if(/(^|\.)instagram\.com$/.test(h))return['Instagram','sns'];
+  if(/(^|\.)tiktok\.com$/.test(h))return['TikTok','sns'];
+  return['リンク','web']}
+const LOCK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-label="鍵付き"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const UNLOCK='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" aria-label="鍵を開けています"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+
+/* ---------- storage ---------- */
+let db=null;const mem={folders:new Map(),notes:new Map(),images:new Map()};
+function openDB(){return new Promise((res,rej)=>{let r;try{r=indexedDB.open('clipnote',1)}catch(e){return rej(e)}
+  r.onupgradeneeded=()=>{const d=r.result;for(const s of['folders','notes','images'])if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'})};
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);r.onblocked=()=>rej(new Error('blocked'))})}
+function rq(store,mode,fn){return new Promise((res,rej)=>{const t=db.transaction(store,mode);const q=fn(t.objectStore(store));t.oncomplete=()=>res(q&&q.result);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}
+const S={
+  all:s=>db?rq(s,'readonly',o=>o.getAll()):Promise.resolve([...mem[s].values()]),
+  get:(s,id)=>db?rq(s,'readonly',o=>o.get(id)):Promise.resolve(mem[s].get(id)),
+  put:(s,v)=>db?rq(s,'readwrite',o=>o.put(v)):(mem[s].set(v.id,v),Promise.resolve()),
+  del:(s,id)=>db?rq(s,'readwrite',o=>o.delete(id)):(mem[s].delete(id),Promise.resolve())};
+async function hash(pass,salt){const data=new TextEncoder().encode(salt+':'+pass);
+  try{const b=await crypto.subtle.digest('SHA-256',data);return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+  catch(e){let h=2166136261;for(const c of data){h^=c;h=Math.imul(h,16777619)}return 'f'+(h>>>0).toString(16)}}
+
+/* ---------- state ---------- */
+const st={folders:[],notes:[],folder:'all',tab:'notes',q:'',unlocked:new Set(),editing:null,removedImgs:[]};
+const fById=id=>st.folders.find(f=>f.id===id);
+const isLocked=id=>{const f=fById(id);return!!(f&&f.lock&&!st.unlocked.has(id))};
+function visibleNotes(){
+  let n=st.notes.filter(x=>!isLocked(x.folderId));
+  if(st.folder!=='all')n=n.filter(x=>x.folderId===st.folder);
+  const toks=st.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if(toks.length)n=n.filter(x=>toks.every(t=>(t[0]==='#'||t[0]==='＃')&&t.length>1
+    ?x.tags.some(g=>g.toLowerCase().includes(t.slice(1)))
+    :(x.title+'\n'+x.body+'\n'+x.tags.join(' ')).toLowerCase().includes(t)));
+  return n.sort((a,b)=>b.updated-a.updated)}
+
+/* ---------- images ---------- */
+const urlCache=new Map();
+async function imgURL(id){if(urlCache.has(id))return urlCache.get(id);const r=await S.get('images',id);if(!r)return'';const u=URL.createObjectURL(r.blob);urlCache.set(id,u);return u}
+function hydrate(root){root.querySelectorAll('img[data-img]').forEach(async el=>{if(!el.getAttribute('src')){const u=await imgURL(el.dataset.img);if(u)el.src=u}})}
+
+/* ---------- render ---------- */
+function renderChips(){
+  const item=(id,name,f)=>`<button class="chip" data-act="folder" data-id="${id}" aria-pressed="${st.folder===id}">${f&&f.lock?(st.unlocked.has(id)?UNLOCK:LOCK):''}${esc(name)}</button>`;
+  $('#chips').innerHTML=item('all','すべて')+st.folders.map(f=>item(f.id,f.name,f)).join('')+`<button class="chip ghost" data-act="folders">＋ フォルダ管理</button>`;
+  const fb=$('#folderbar');const f=fById(st.folder);
+  if(f&&f.lock&&st.unlocked.has(f.id)){fb.hidden=false;fb.innerHTML=`<span>鍵を開けています。アプリを閉じると自動で閉まります。</span><button class="btn sm" data-act="relock">鍵を閉める</button>`}
+  else fb.hidden=true}
+function card(n){const f=fById(n.folderId);const u=urlsOf(n.body).length;
+  return `<article class="card" data-act="open" data-id="${n.id}" tabindex="0">
+  <div class="card-top"><h3>${esc(n.title||'無題')}</h3>${n.images.length?`<img class="thumb" data-img="${n.images[0]}" alt="">`:''}</div>
+  ${n.body.trim()?`<p class="snip">${esc(n.body.replace(URL_RE,'[リンク]').slice(0,120))}</p>`:''}
+  <div class="meta"><span>${f?esc(f.name):'未分類'}</span><time>${fmt(n.updated)}</time>${u?`<span>リンク ${u}</span>`:''}${n.images.length?`<span>画像 ${n.images.length}</span>`:''}</div>
+  ${n.tags.length?`<div class="tags">${n.tags.map(t=>`<button class="tag" data-act="tag" data-tag="${esc(t)}">#${esc(t)}</button>`).join('')}</div>`:''}
+  </article>`}
+function linkRow(u,from){const[k,c]=kind(u);
+  return `<div class="link"><div class="link-head"><span class="badge b-${c}">${k}</span>${from?`<span class="from">${esc(from)}</span>`:''}</div>
+  <div class="url">${esc(u)}</div>
+  <div class="acts"><a class="btn sm" href="${esc(u)}" target="_blank" rel="noopener noreferrer">開く</a><button class="btn sm" data-act="copy" data-url="${esc(u)}">コピー</button>${c==='img'||c==='vid'?`<button class="btn sm primary" data-act="dl" data-url="${esc(u)}">保存</button>`:''}</div></div>`}
+function render(){
+  renderChips();
+  const vn=visibleNotes();const links=[];const seen=new Set();
+  for(const n of vn)for(const u of urlsOf(n.body))if(!seen.has(u)){seen.add(u);links.push([u,n.title||'無題'])}
+  $('#cnt-notes').textContent=vn.length;$('#cnt-links').textContent=links.length;
+  document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===st.tab)));
+  $('#qx').hidden=!st.q;
+  const list=$('#list');
+  if(st.folder!=='all'&&isLocked(st.folder)){list.innerHTML=`<div class="empty">${LOCK.replace('width="12" height="12"','width="36" height="36"')}<p>このフォルダには鍵がかかっています。</p><button class="btn primary" data-act="unlock" data-id="${st.folder}">パスコードを入力</button></div>`;return}
+  if(st.tab==='notes'){
+    list.innerHTML=vn.length?vn.map(card).join(''):`<div class="empty"><p>${st.q?'見つかりませんでした。別の言葉で探してみてください。':'メモはまだありません。右下の「＋ メモ」から作れます。'}</p></div>`;
+  }else{
+    list.innerHTML=links.length?links.map(([u,t])=>linkRow(u,t)).join(''):`<div class="empty"><p>メモに貼ったURLがここに一覧で出ます。</p></div>`;
+  }
+  hydrate(list)}
+
+/* ---------- sheet & toast ---------- */
+function sheet(html){$('#sheet-body').innerHTML=html;$('#sheet').hidden=false;const i=$('#sheet-body input:not([type=file])');if(i)setTimeout(()=>i.focus(),60)}
+function closeSheet(){$('#sheet').hidden=true;$('#sheet-body').innerHTML=''}
+let tt;function toast(m,ms=2200){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,ms)}
+function confirmSheet(title,msg,okLabel,act,id){sheet(`<h2>${esc(title)}</h2><p class="hint">${esc(msg)}</p><div class="row"><button class="btn" data-act="close">やめる</button><button class="btn danger" data-act="${act}" data-id="${esc(id||'')}">${esc(okLabel)}</button></div>`)}
+
+/* ---------- lock ---------- */
+function unlockSheet(id,then){const f=fById(id);sheet(`<h2>「${esc(f.name)}」の鍵を開ける</h2>
+  <form data-form="unlock" data-id="${id}" data-then="${esc(then||'')}"><input id="pass-in" class="field" type="password" inputmode="numeric" autocomplete="off" placeholder="パスコード">
+  <p class="err" id="pass-err" hidden>パスコードが違います。もう一度入力してください。</p>
+  <div class="row"><button type="button" class="btn" data-act="close">やめる</button><button class="btn primary">開ける</button></div></form>`)}
+function lockSetSheet(id){const f=fById(id);sheet(`<h2>「${esc(f.name)}」に鍵をかける</h2>
+  <form data-form="setlock" data-id="${id}"><input id="np1" class="field" type="password" inputmode="numeric" autocomplete="off" placeholder="パスコード（4文字以上）">
+  <input id="np2" class="field" type="password" inputmode="numeric" autocomplete="off" placeholder="もう一度入力">
+  <p class="err" id="np-err" hidden></p>
+  <p class="hint">パスコードを忘れると中のメモは開けません。メモそのものは暗号化されないので、スマホ自体のロックも使ってください。</p>
+  <div class="row"><button type="button" class="btn" data-act="folders">戻る</button><button class="btn primary">鍵をかける</button></div></form>`)}
+
+/* ---------- folders sheet ---------- */
+function foldersSheet(){
+  const rows=st.folders.map(f=>{const locked=isLocked(f.id);const cnt=st.notes.filter(n=>n.folderId===f.id).length;
+    return `<div class="frow"><div style="display:flex;gap:8px"><input id="fn-${f.id}" class="field" value="${esc(f.name)}" ${locked?'disabled':''} aria-label="フォルダ名"></div>
+    <div class="meta"><span>メモ ${locked?'—':cnt}</span><span>作成 ${fmt(f.created)}</span><span>${f.lock?(locked?'鍵がかかっています':'鍵を開けています'):'鍵なし'}</span></div>
+    <div class="acts">${locked?`<button class="btn sm primary" data-act="unlock" data-id="${f.id}" data-then="folders">鍵を開けて編集</button>`
+      :`<button class="btn sm" data-act="f-rename" data-id="${f.id}">名前を保存</button>${f.lock?`<button class="btn sm" data-act="f-unlockremove" data-id="${f.id}">鍵を外す</button>`:`<button class="btn sm" data-act="f-lock" data-id="${f.id}">鍵をかける</button>`}<button class="btn sm danger" data-act="f-del" data-id="${f.id}">削除</button>`}</div></div>`}).join('');
+  sheet(`<h2>フォルダ管理</h2><form data-form="f-add" style="display:flex;gap:8px"><input id="f-new" class="field" placeholder="新しいフォルダ名" autocomplete="off"><button class="btn primary" style="flex:none">追加</button></form>${rows||'<p class="hint">まだフォルダはありません。</p>'}<div class="row"><button class="btn" data-act="close">閉じる</button></div>`)}
+
+/* ---------- editor ---------- */
+function folderOptions(sel){return `<option value="">未分類</option>`+st.folders.filter(f=>!isLocked(f.id)||f.id===sel).map(f=>`<option value="${f.id}" ${f.id===sel?'selected':''}>${esc(f.name)}${f.lock?'（鍵付き）':''}</option>`).join('')}
+function openEditor(n){
+  st.editing=JSON.parse(JSON.stringify(n));st.removedImgs=[];
+  $('#ed-title').value=n.title;$('#ed-body').value=n.body;$('#ed-tags').value=n.tags.join(' ');
+  $('#ed-folder').innerHTML=folderOptions(n.folderId);$('#ed-folder').value=n.folderId||'';
+  $('#ed-date').innerHTML=`作成 ${fmt(n.created)}<br>更新 ${fmt(n.updated)}`;
+  renderEdImgs();renderEdLinks();$('#editor').hidden=false;$('#editor').scrollTop=0;
+  if(!n.title&&!n.body)setTimeout(()=>$('#ed-body').focus(),80)}
+function renderEdImgs(){const box=$('#ed-imgs');box.innerHTML=st.editing.images.map(id=>`<button data-act="img" data-id="${id}" aria-label="画像を開く"><img data-img="${id}" alt=""></button>`).join('');hydrate(box)}
+function renderEdLinks(){const us=urlsOf($('#ed-body').value);$('#ed-links-h').hidden=!us.length;$('#ed-links').innerHTML=us.map(u=>linkRow(u,'')).join('')}
+async function saveEditor(){
+  const e=st.editing;if(!e)return;
+  e.title=$('#ed-title').value.trim();e.body=$('#ed-body').value;
+  e.tags=[...new Set($('#ed-tags').value.split(/[\s,、#＃]+/).map(s=>s.trim()).filter(Boolean))];
+  e.folderId=$('#ed-folder').value||null;
+  const old=st.notes.find(x=>x.id===e.id);
+  const isEmpty=!e.title&&!e.body.trim()&&!e.images.length;
+  for(const id of st.removedImgs)await S.del('images',id);
+  if(isEmpty){if(old)await removeNote(e.id,false)}
+  else{const sig=x=>JSON.stringify([x.title,x.body,x.tags,x.folderId,x.images]);
+    if(!old||sig(old)!==sig(e)){e.updated=Date.now();await S.put('notes',e);st.notes=st.notes.filter(x=>x.id!==e.id).concat(e)}}
+  st.editing=null;$('#editor').hidden=true;render()}
+async function removeNote(id,withImgs=true){const n=st.notes.find(x=>x.id===id);if(n&&withImgs)for(const i of n.images)await S.del('images',i);await S.del('notes',id);st.notes=st.notes.filter(x=>x.id!==id)}
+async function addFiles(files){for(const f of files){if(!f.type.startsWith('image/'))continue;const id=uid();await S.put('images',{id,blob:f});st.editing.images.push(id)}renderEdImgs()}
+
+/* ---------- links ---------- */
+function copy(t){const fb=()=>{sheet(`<h2>URLをコピー</h2><p class="hint">下の文字を長押ししてコピーしてください。</p><textarea readonly id="copy-ta" class="field" rows="3">${esc(t)}</textarea><div class="row"><button class="btn" data-act="close">閉じる</button></div>`);const ta=$('#copy-ta');ta.focus();ta.select()};
+  try{navigator.clipboard.writeText(t).then(()=>toast('コピーしました'),fb)}catch(e){fb()}}
+function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),5000)}
+async function dl(url){toast('読み込み中…',8000);
+  try{const r=await fetch(url,{mode:'cors'});if(!r.ok)throw 0;const b=await r.blob();
+    let name='file';try{name=decodeURIComponent(new URL(url).pathname.split('/').pop())||'file'}catch(e){}
+    saveBlob(b,name);toast('ダウンロードを始めました')}
+  catch(e){toast('このサイトは直接保存できません。「開く」で表示してから長押しで保存してください',4500)}}
+
+/* ---------- backup ---------- */
+const toData=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
+function fromData(d){const[h,b]=d.split(',');const m=(h.match(/:(.*?);/)||[])[1]||'';const s=atob(b);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new Blob([u],{type:m})}
+function settingsSheet(){sheet(`<h2>バックアップ</h2>
+  <p class="hint">メモと画像はこのスマホのブラウザの中だけに保存されています。機種変更やデータ削除に備えて、ときどき書き出しておくと安心です。</p>
+  <div class="acts"><button class="btn primary" data-act="export">書き出す</button><label class="btn" for="imp-file">読み込む</label><input id="imp-file" class="vh" type="file" accept="application/json,.json"></div>
+  <p class="hint">メモ ${st.notes.length}件・フォルダ ${st.folders.length}個</p>
+  <div class="row"><button class="btn" data-act="close">閉じる</button></div>`)}
+async function exportAll(){toast('準備中…',8000);const imgs=await S.all('images');
+  const images=await Promise.all(imgs.map(async i=>({id:i.id,data:await toData(i.blob)})));
+  const json=JSON.stringify({app:'clipnote',v:1,at:Date.now(),folders:st.folders,notes:st.notes,images});
+  const d=new Date();saveBlob(new Blob([json],{type:'application/json'}),`clipnote-${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}.json`);toast('書き出しを始めました')}
+async function importFile(file){try{const j=JSON.parse(await file.text());if(j.app!=='clipnote')throw 0;
+  for(const i of j.images||[])await S.put('images',{id:i.id,blob:fromData(i.data)});
+  for(const f of j.folders||[])await S.put('folders',f);for(const n of j.notes||[])await S.put('notes',n);
+  await load();closeSheet();render();toast(`${(j.notes||[]).length}件のメモを読み込みました`)}
+  catch(e){toast('読み込めませんでした。クリップ帳で書き出したファイルを選んでください',4000)}}
+
+/* ---------- events ---------- */
+document.addEventListener('click',async ev=>{
+  const t=ev.target.closest('[data-act]');if(!t)return;const a=t.dataset.act,id=t.dataset.id;
+  switch(a){
+    case'folder':if(isLocked(id))unlockSheet(id,'go');else{st.folder=id;render()}break;
+    case'folders':foldersSheet();break;
+    case'tab':st.tab=t.dataset.tab;render();break;
+    case'clearq':st.q='';$('#q').value='';render();break;
+    case'tag':st.q='#'+t.dataset.tag;$('#q').value=st.q;st.tab='notes';render();window.scrollTo(0,0);break;
+    case'open':openEditor(st.notes.find(n=>n.id===id));break;
+    case'new':{const now=Date.now();openEditor({id:uid(),title:'',body:'',tags:[],images:[],folderId:st.folder!=='all'?st.folder:null,created:now,updated:now});break}
+    case'ed-done':await saveEditor();break;
+    case'ed-del':confirmSheet('このメモを削除しますか？','削除すると元に戻せません。貼った画像も一緒に消えます。','削除する','ed-del-ok');break;
+    case'ed-del-ok':{const e=st.editing;closeSheet();for(const i of st.removedImgs)await S.del('images',i);await removeNote(e.id);st.editing=null;$('#editor').hidden=true;render();toast('削除しました');break}
+    case'img':{const u=await imgURL(id);sheet(`<img class="big" src="${u}" alt=""><p class="hint">画像を長押しすると写真に保存できます。</p><div class="row"><button class="btn danger" data-act="img-rm" data-id="${id}">メモから外す</button><button class="btn" data-act="img-save" data-id="${id}">保存</button><button class="btn" data-act="close">閉じる</button></div>`);break}
+    case'img-save':{const r=await S.get('images',id);if(r)saveBlob(r.blob,'image.'+((r.blob.type.split('/')[1]||'jpg').replace('jpeg','jpg')));break}
+    case'img-rm':st.editing.images=st.editing.images.filter(x=>x!==id);st.removedImgs.push(id);closeSheet();renderEdImgs();break;
+    case'copy':copy(t.dataset.url);break;
+    case'dl':dl(t.dataset.url);break;
+    case'unlock':unlockSheet(id,t.dataset.then);break;
+    case'relock':st.unlocked.delete(st.folder);render();toast('鍵を閉めました');break;
+    case'f-rename':{const v=$('#fn-'+id).value.trim();if(!v){toast('名前を入力してください');break}const f=fById(id);f.name=v;await S.put('folders',f);render();toast('名前を保存しました');break}
+    case'f-lock':lockSetSheet(id);break;
+    case'f-unlockremove':{const f=fById(id);delete f.lock;delete f.salt;await S.put('folders',f);st.unlocked.delete(id);render();foldersSheet();toast('鍵を外しました');break}
+    case'f-del':{const f=fById(id);const c=st.notes.filter(n=>n.folderId===id).length;confirmSheet(`「${f.name}」を削除しますか？`,c?`中のメモ${c}件は消えずに「未分類」に移ります。`:'このフォルダは空です。','削除する','f-del-ok',id);break}
+    case'f-del-ok':{for(const n of st.notes.filter(n=>n.folderId===id)){n.folderId=null;await S.put('notes',n)}await S.del('folders',id);st.folders=st.folders.filter(f=>f.id!==id);if(st.folder===id)st.folder='all';render();foldersSheet();break}
+    case'settings':settingsSheet();break;
+    case'export':exportAll();break;
+    case'close':closeSheet();break;
+  }});
+$('#sheet').addEventListener('click',e=>{if(e.target.id==='sheet')closeSheet()});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!$('#sheet').hidden)closeSheet();
+  if(e.key==='Enter'&&e.target.classList&&e.target.classList.contains('card'))e.target.click()});
+document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target;const kind=f.dataset.form;
+  if(kind==='unlock'){const id=f.dataset.id;const fo=fById(id);const h=await hash($('#pass-in').value,fo.salt);
+    if(h!==fo.lock){$('#pass-err').hidden=false;$('#pass-in').value='';$('#pass-in').focus();return}
+    st.unlocked.add(id);if(f.dataset.then==='folders'){render();foldersSheet()}else{closeSheet();if(f.dataset.then==='go')st.folder=id;render()}}
+  if(kind==='setlock'){const a=$('#np1').value,b=$('#np2').value,err=$('#np-err');
+    if(a.length<4){err.textContent='4文字以上で入力してください。';err.hidden=false;return}
+    if(a!==b){err.textContent='2回の入力が一致しません。';err.hidden=false;return}
+    const fo=fById(f.dataset.id);fo.salt=uid();fo.lock=await hash(a,fo.salt);await S.put('folders',fo);st.unlocked.add(fo.id);render();foldersSheet();toast('鍵をかけました')}
+  if(kind==='f-add'){const v=$('#f-new').value.trim();if(!v)return;const fo={id:uid(),name:v,created:Date.now()};await S.put('folders',fo);st.folders.push(fo);render();foldersSheet();toast('フォルダを追加しました')}});
+$('#q').addEventListener('input',e=>{st.q=e.target.value;render()});
+let lt;$('#ed-body').addEventListener('input',()=>{clearTimeout(lt);lt=setTimeout(renderEdLinks,250)});
+$('#ed-file').addEventListener('change',async e=>{await addFiles([...e.target.files]);e.target.value=''});
+document.addEventListener('change',e=>{if(e.target.id==='imp-file'&&e.target.files[0])importFile(e.target.files[0])});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&st.unlocked.size){st.unlocked.clear();if(!st.editing)render()}});
+
+/* ---------- start ---------- */
+async function load(){st.folders=(await S.all('folders')).sort((a,b)=>a.created-b.created);st.notes=await S.all('notes')}
+async function seed(){const now=Date.now(),m=60000;
+  const fs=[{id:'f-daily',name:'日常',created:now-9*m},{id:'f-later',name:'あとで見る',created:now-8*m},{id:'f-secret',name:'ひみつ',created:now-7*m,salt:'demo'}];
+  fs[2].lock=await hash('1234','demo');
+  const ns=[
+   {id:'n-howto',folderId:'f-daily',title:'クリップ帳の使い方（サンプル）',tags:['サンプル','使い方'],images:[],created:now-6*m,updated:now-1*m,
+    body:'右下の「＋ メモ」で新しいメモを作れます。\nURLを貼ると「リンク一覧」に自動でまとまります。\n画像や動画の直リンクは「保存」でダウンロードできます。\n\n「ひみつ」フォルダのサンプルのパスコードは 1234 です。\nこのサンプルは消して大丈夫です。'},
+   {id:'n-later',folderId:'f-later',title:'あとで見る動画（サンプル）',tags:['サンプル','動画'],images:[],created:now-5*m,updated:now-3*m,
+    body:'気になった投稿\nhttps://x.com/example/status/1234567890\nhttps://www.youtube.com/watch?v=example\n\n壁紙候補\nhttps://example.com/wallpaper.jpg'},
+   {id:'n-secret',folderId:'f-secret',title:'鍵付きフォルダのメモ（サンプル）',tags:['サンプル'],images:[],created:now-4*m,updated:now-4*m,
+    body:'鍵を開けたときだけ見えるメモです。アプリを閉じると自動で鍵が閉まります。'}];
+  for(const f of fs)await S.put('folders',f);for(const n of ns)await S.put('notes',n)}
+async function init(){
+  try{db=await openDB()}catch(e){db=null}
+  await load();
+  let seeded=false;try{seeded=localStorage.getItem('cn_seeded')==='1'}catch(e){}
+  if(!st.folders.length&&!st.notes.length&&!seeded){await seed();await load();try{localStorage.setItem('cn_seeded','1')}catch(e){}}
+  render();
+  if(!db)toast('この画面では保存できないため、閉じるとメモが消えます',5000);
+  try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}}
+init();
+})();
+</script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}</script>
+</body></html>
